@@ -1,0 +1,62 @@
+trigger:
+  branches:
+    include:
+    - main
+
+pr: none
+
+pool:
+  vmImage: 'macOS-latest'
+
+jobs:
+- job: build
+  displayName: 'Build and Release Genpact Genius App'
+  strategy:
+    matrix:
+      Windows:
+        imageName: 'windows-latest'
+        platform: 'win32'
+      macOS_arm64:
+        imageName: 'macOS-latest'
+        platform: 'darwin'
+        arch: 'arm64'
+      macOS_x64:
+        imageName: 'macOS-latest'
+        platform: 'darwin'
+        arch: 'x64'
+
+  pool:
+    vmImage: $(imageName)
+
+  steps:
+  - checkout: self
+
+  - task: NodeTool@0
+    inputs:
+      versionSpec: '20.12.2'
+    displayName: 'Set up Node.js'
+
+  - script: npm install
+    displayName: 'Install Dependencies'
+
+  - script: npm install appdmg --save-dev
+    displayName: 'Install macOS-specific dependencies'
+    condition: and(eq(variables['Agent.OS'], 'Darwin'))
+
+  - script: npm run make -- --platform=$(platform) --arch=arm64
+    displayName: 'Build app with Electron Forge for Mac ARM64'
+    condition: and(eq(variables['Agent.OS'], 'Darwin'), eq(variables['arch'], 'arm64'))
+
+  - script: npm run make -- --platform=$(platform) --arch=x64
+    displayName: 'Build app with Electron Forge for Mac x64'
+    condition: and(eq(variables['Agent.OS'], 'Darwin'), eq(variables['arch'], 'x64'))
+
+  - script: npm run make -- --platform=$(platform)
+    displayName: 'Build app with Electron Forge for Windows'
+    condition: eq(variables['Agent.OS'], 'Windows')
+
+  - task: PublishBuildArtifacts@1
+    inputs:
+      PathtoPublish: 'out/make/**'
+      ArtifactName: '$(platform)-$(arch || win32)-build'
+      publishLocation: 'container'
