@@ -5,31 +5,29 @@ trigger:
 
 pr: none
 
-pool:
-  vmImage: 'macOS-latest'
-
 jobs:
-- job: build
+- job: Build
   displayName: 'Build and Release Genpact Genius App'
   strategy:
     matrix:
       Windows:
-        imageName: 'windows-latest'
+        osName: 'windows-latest'
         platform: 'win32'
       macOS_arm64:
-        imageName: 'macOS-latest'
+        osName: 'macOS-latest'
         platform: 'darwin'
         arch: 'arm64'
       macOS_x64:
-        imageName: 'macOS-latest'
+        osName: 'macOS-latest'
         platform: 'darwin'
         arch: 'x64'
 
   pool:
-    vmImage: $(imageName)
+    vmImage: $(osName)
 
   steps:
   - checkout: self
+    displayName: 'Checkout code'
 
   - task: NodeTool@0
     inputs:
@@ -41,7 +39,7 @@ jobs:
 
   - script: npm install appdmg --save-dev
     displayName: 'Install macOS-specific dependencies'
-    condition: and(eq(variables['Agent.OS'], 'Darwin'))
+    condition: eq(variables['Agent.OS'], 'Darwin')
 
   - script: npm run make -- --platform=$(platform) --arch=arm64
     displayName: 'Build app with Electron Forge for Mac ARM64'
@@ -55,8 +53,17 @@ jobs:
     displayName: 'Build app with Electron Forge for Windows'
     condition: eq(variables['Agent.OS'], 'Windows')
 
+  - pwsh: |
+      if ('$(arch)' -eq '') {
+        echo "##vso[task.setvariable variable=artifactName]$(platform)-win32-build"
+      } else {
+        echo "##vso[task.setvariable variable=artifactName]$(platform)-$(arch)-build"
+      }
+    displayName: 'Set Artifact Name'
+
   - task: PublishBuildArtifacts@1
     inputs:
       PathtoPublish: 'out/make/**'
-      ArtifactName: '$(platform)-$(arch || win32)-build'
+      ArtifactName: '$(artifactName)'
       publishLocation: 'container'
+    displayName: 'Upload Artifacts'
